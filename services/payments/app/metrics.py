@@ -7,7 +7,7 @@ disable_created_metrics()
 
 # --- Metryki techniczne (RED) dla każdego endpointu ---
 
-HTTP_REQUEST_TOTAL = Counter(
+HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
     "Total number of HTTP requests",
     ["method", "endpoint", "status"],
