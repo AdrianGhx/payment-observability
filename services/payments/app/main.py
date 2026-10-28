@@ -85,6 +85,8 @@ async def observability_middleware(request: Request, call_next):
             level = logging.ERROR
         elif status_code >= 400:
             level = logging.WARNING
+        elif endpoint == "/health":
+            level =logging.DEBUG
         else:
             level = logging.INFO
 
