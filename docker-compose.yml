@@ -1,0 +1,37 @@
+name: payment-observability
+
+services:
+  payments:
+    build: ./services/payments
+    image: payments:0.1.0
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.151.0
+    command:
+      - "-storageDataPath=/storage"
+      - "-retentionPeriod=30d"
+    volumes:
+      - vmdata:/storage
+    ports:
+      - "127.0.0.1:8428:8428"
+    restart: unless-stopped
+
+  vmagent:
+    image: victoriametrics/vmagent:v1.151.0
+    command:
+      - "-promscrape.config=/etc/vmagent/scrape.yml"
+      - "-remoteWrite.url=http://victoriametrics:8428/api/v1/write"
+    volumes:
+      - ./monitoring/vmagent/scrape.yml:/etc/vmagent/scrape.yml:ro
+    ports:
+      - "127.0.0.1:8429:8429"
+    depends_on:
+      - victoriametrics
+      - payments
+    restart: unless-stopped
+
+volumes:
+  vmdata:
