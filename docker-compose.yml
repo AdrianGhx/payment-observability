@@ -4,6 +4,7 @@ services:
   payments:
     build: ./services/payments
     image: payments:0.1.0
+    pull_policy: build
     ports:
       - "127.0.0.1:8000:8000"
     restart: unless-stopped
@@ -17,6 +18,11 @@ services:
       - vmdata:/storage
     ports:
       - "127.0.0.1:8428:8428"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   vmagent:
@@ -33,5 +39,23 @@ services:
       - payments
     restart: unless-stopped
 
+  grafana:
+    image: grafana/grafana:13.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?ustaw GRAFANA_ADMIN_PASSWORD w pliku .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      victoriametrics:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   vmdata:
+  grafanadata:
