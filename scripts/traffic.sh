@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
 # traffic.sh - generator ruchu (platnosci) do serwisu payments
-# Uzycie: ./scripts/traffic.sh [LICZBA_PLATNOSCI]
+# Uzycie: ./scripts/traffic.sh [PLATNOSCI_NA_SEKUNDE] [SEKUNDY]
 
 set -euo pipefail
 
 URL="http://127.0.0.1:8000"
 CURRENCIES=( PLN EUR USD )
-COUNT=${1:-10}
+RATE=${1:-5}
+DURATION=${2:-30}
 
 RESULTS_FILE=$(mktemp)
 trap 'rm -f "$RESULTS_FILE"' EXIT
@@ -26,22 +27,33 @@ send_payment() {
 print_summary() {
   local total errors
   total=$(wc -l < "$RESULTS_FILE" | tr -d ' ')
-  errors=$(grep -cv '^2' "$RESULTS_FILE" || true)
 
   echo
   echo "[traffic] Wyslano: $total"
+  if (( total == 0 )); then
+    echo "[traffic] Brak wyslanych platnosci"
+    return
+  fi
+
+  awk -v t="$total" -v d="$DURATION" \
+    'BEGIN { printf "[traffic] Rzeczywiste tempo: %.1f platnosci/s (cel: %s)\n", t / d, ENVIRON["RATE"] }'
   sort "$RESULTS_FILE" | uniq -c | while read -r count code; do
     echo "[traffic]   HTTP $code: $count"
   done
+  errors=$(grep -cv '^2' "$RESULTS_FILE" || true)
   awk -v e="$errors" -v t="$total" \
     'BEGIN { printf "[traffic] Bledy (nie-2xx): %d (%.1f%%)\n", e, 100 * e / t }'
 }
 
-echo "[traffic] Wysylam $COUNT platnosci do $URL"
-for i in $(seq 1 "$COUNT"); do
-  code=$(send_payment)
-  printf "%3d: %s\n" "$i" "$code"
-  echo "$code" >> "$RESULTS_FILE"
+interval=$(awk -v r="$RATE" 'BEGIN { printf "%.3f", 1 / r }')
+end=$(( SECONDS + DURATION ))
+
+echo "[traffic] Cel: $RATE platnosci/s przez ${DURATION}s do $URL"
+while (( SECONDS < end )); do
+  send_payment >> "$RESULTS_FILE"
+  printf "."
+  sleep "$interval"
 done
 
+export RATE
 print_summary
