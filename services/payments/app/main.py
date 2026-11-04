@@ -41,6 +41,7 @@ class PaymentRequest(BaseModel):
 
 # ---------- Monitoring ----------
 
+
 def get_route_template(request: Request) -> str:
     """Zwraca szablon ścieżki (np. /payments/{payment_id}), a nie faktyczny URL.
     Chroni przed eksplozją kardynalności labela 'endpoint'."""
@@ -86,17 +87,23 @@ async def observability_middleware(request: Request, call_next):
         elif status_code >= 400:
             level = logging.WARNING
         elif endpoint == "/health":
-            level =logging.DEBUG
+            level = logging.DEBUG
         else:
             level = logging.INFO
 
-        logger.log(level, "request completed", extra={"fields": {
-            "method": method,
-            "endpoint": endpoint,
-            "path": request.url.path,
-            "status": status_code,
-            "duration_ms": round(duration * 1000, 2),
-        }})
+        logger.log(
+            level,
+            "request completed",
+            extra={
+                "fields": {
+                    "method": method,
+                    "endpoint": endpoint,
+                    "path": request.url.path,
+                    "status": status_code,
+                    "duration_ms": round(duration * 1000, 2),
+                }
+            },
+        )
 
         request_id_var.reset(token)
 
@@ -107,6 +114,7 @@ async def metrics():
 
 
 # ---------- API ----------
+
 
 @app.get("/health")
 async def health():
@@ -120,11 +128,16 @@ async def create_payment(req: PaymentRequest):
 
         if random.random() < FAILURE_RATE:
             PAYMENTS_TOTAL.labels(status="failed", currency=req.currency.value).inc()
-            logger.error("payment failed", extra={"fields": {
-                "amount": req.amount,
-                "currency": req.currency.value,
-                "reason": "processor_error",
-            }})
+            logger.error(
+                "payment failed",
+                extra={
+                    "fields": {
+                        "amount": req.amount,
+                        "currency": req.currency.value,
+                        "reason": "processor_error",
+                    }
+                },
+            )
             raise HTTPException(status_code=500, detail="Payment processor error")
 
         payment_id = str(uuid.uuid4())
@@ -137,11 +150,16 @@ async def create_payment(req: PaymentRequest):
         }
         payments_db[payment_id] = payment
         PAYMENTS_TOTAL.labels(status="success", currency=req.currency.value).inc()
-        logger.info("payment completed", extra={"fields": {
-            "payment_id": payment_id,
-            "amount": req.amount,
-            "currency": req.currency.value,
-        }})
+        logger.info(
+            "payment completed",
+            extra={
+                "fields": {
+                    "payment_id": payment_id,
+                    "amount": req.amount,
+                    "currency": req.currency.value,
+                }
+            },
+        )
         return payment
 
 
@@ -149,8 +167,13 @@ async def create_payment(req: PaymentRequest):
 async def get_payment(payment_id: str):
     payment = payments_db.get(payment_id)
     if payment is None:
-        logger.warning("payment not found", extra={"fields": {
-            "payment_id": payment_id,
-        }})
+        logger.warning(
+            "payment not found",
+            extra={
+                "fields": {
+                    "payment_id": payment_id,
+                }
+            },
+        )
         raise HTTPException(status_code=404, detail="Payment not found")
     return payment
