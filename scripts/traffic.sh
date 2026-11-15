@@ -5,10 +5,14 @@
 
 set -euo pipefail
 
-URL="http://127.0.0.1:8000"
+DEFAULT_URL="http://127.0.0.1:8000"
+DEFAULT_RATE=5
+DEFAULT_DURATION=30
+
+URL=$DEFAULT_URL
+RATE=$DEFAULT_RATE
+DURATION=$DEFAULT_DURATION
 CURRENCIES=( PLN EUR USD )
-RATE=5
-DURATION=30
 RUNNING=1
 ELAPSED=0
 
@@ -19,9 +23,9 @@ usage() {
   cat <<USAGE
 Uzycie: $(basename "$0") [-r RPS] [-d SEKUNDY] [-u URL] [-h]
 
-  -r RPS       docelowa liczba platnosci na sekunde (domyslnie: $RATE)
-  -d SEKUNDY   czas trwania, 0 = do przerwania Ctrl+C (domyslnie: $DURATION)
-  -u URL       adres serwisu payments (domyslnie: $URL)
+  -r RPS       docelowa liczba platnosci na sekunde (domyslnie: $DEFAULT_RATE)
+  -d SEKUNDY   czas trwania, 0 = do przerwania Ctrl+C (domyslnie: $DEFAULT_DURATION)
+  -u URL       adres serwisu payments (domyslnie: $DEFAULT_URL)
   -h           ta pomoc
 USAGE
 }
@@ -42,6 +46,9 @@ parse_args() {
       \?) fail "Nieznana opcja -$OPTARG (uzyj -h)" ;;
     esac
   done
+
+  shift $(( OPTIND - 1 ))
+  (( $# == 0 )) || fail "Nieoczekiwane argumenty: $* (uzyj -h)"
 
   [[ $RATE =~ ^[1-9][0-9]*$ ]] || fail "RPS musi byc dodatnia liczba calkowita, podano: $RATE"
   [[ $DURATION =~ ^[0-9]+$ ]] || fail "Czas musi byc liczba calkowita >= 0, podano: $DURATION"
