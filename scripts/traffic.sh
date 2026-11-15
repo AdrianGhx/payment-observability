@@ -9,6 +9,8 @@ URL="http://127.0.0.1:8000"
 CURRENCIES=( PLN EUR USD )
 RATE=5
 DURATION=30
+RUNNING=1
+ELAPSED=0
 
 RESULTS_FILE=$(mktemp)
 trap 'rm -f "$RESULTS_FILE"' EXIT
@@ -18,7 +20,7 @@ usage() {
 Uzycie: $(basename "$0") [-r RPS] [-d SEKUNDY] [-u URL] [-h]
 
   -r RPS       docelowa liczba platnosci na sekunde (domyslnie: $RATE)
-  -d SEKUNDY   czas trwania w sekundach (domyslnie: $DURATION)
+  -d SEKUNDY   czas trwania, 0 = do przerwania Ctrl+C (domyslnie: $DURATION)
   -u URL       adres serwisu payments (domyslnie: $URL)
   -h           ta pomoc
 USAGE
@@ -42,7 +44,7 @@ parse_args() {
   done
 
   [[ $RATE =~ ^[1-9][0-9]*$ ]] || fail "RPS musi byc dodatnia liczba calkowita, podano: $RATE"
-  [[ $DURATION =~ ^[1-9][0-9]*$ ]] || fail "Czas musi byc dodatnia liczba calkowita, podano: $DURATION"
+  [[ $DURATION =~ ^[0-9]+$ ]] || fail "Czas musi byc liczba calkowita >= 0, podano: $DURATION"
 }
 
 send_payment() {
@@ -61,13 +63,13 @@ print_summary() {
   total=$(wc -l < "$RESULTS_FILE" | tr -d ' ')
 
   echo
-  echo "[traffic] Wyslano: $total"
+  echo "[traffic] Wyslano: $total w ${ELAPSED}s"
   if (( total == 0 )); then
     echo "[traffic] Brak wyslanych platnosci"
     return
   fi
 
-  awk -v t="$total" -v d="$DURATION" -v r="$RATE" \
+  awk -v t="$total" -v d="$ELAPSED" -v r="$RATE" \
     'BEGIN { printf "[traffic] Rzeczywiste tempo: %.1f platnosci/s (cel: %s)\n", t / d, r }'
   sort "$RESULTS_FILE" | uniq -c | while read -r count code; do
     echo "[traffic]   HTTP $code: $count"
@@ -83,16 +85,27 @@ main() {
   curl -sf -o /dev/null --max-time 3 "$URL/health" \
     || fail "Serwis nie odpowiada pod $URL/health. Uruchom ./scripts/setup.sh"
 
-  local interval end
+  local interval start
   interval=$(awk -v r="$RATE" 'BEGIN { printf "%.3f", 1 / r }')
-  end=$(( SECONDS + DURATION ))
+  start=$SECONDS
 
-  echo "[traffic] Cel: $RATE platnosci/s przez ${DURATION}s do $URL"
-  while (( SECONDS < end )); do
-    send_payment >> "$RESULTS_FILE"
+  if (( DURATION == 0 )); then
+    echo "[traffic] Cel: $RATE platnosci/s do $URL (Ctrl+C konczy)"
+  else
+    echo "[traffic] Cel: $RATE platnosci/s przez ${DURATION}s do $URL (Ctrl+C konczy wczesniej)"
+  fi
+
+  trap 'RUNNING=0' INT
+
+  while (( RUNNING )) && { (( DURATION == 0 )) || (( SECONDS - start < DURATION )); }; do
+    send_payment >> "$RESULTS_FILE" &
     printf "."
-    sleep "$interval"
+    sleep "$interval" || true
   done
+
+  wait
+  ELAPSED=$(( SECONDS - start ))
+  (( ELAPSED > 0 )) || ELAPSED=1
 
   print_summary
 }
